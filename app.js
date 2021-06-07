@@ -65,9 +65,6 @@ app.use("/api/plans", plansRoutes);
 app.use("/api/tradings", tradingRoutes);
 app.use("/api/servers", serversRoutes);
 app.use("/api/apps", appsRoutes);
-// app.use("/api/calendar", calendarRoutes);
-// app.use("/api/note", noteRoutes);
-// app.use("/api/todo", todoRoutes);
 app.use((req, res, next) => {
   const error = new HttpError("Could not find this route.", 404);
   throw error;

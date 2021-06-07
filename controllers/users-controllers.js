@@ -5,6 +5,8 @@ const jwt = require("jsonwebtoken");
 
 const HttpError = require("../model/http-error");
 const User = require("../model/User");
+const nodemailer = require("nodemailer");
+var otpGenerator = require("otp-generator");
 
 const express = require("express");
 const router = express.Router();
@@ -58,9 +60,9 @@ const signup = async (req, res, next) => {
     );
   }
 
-  const { displayName, email, password, role } = req.body;
+  const { displayName, email, password, role, privateKey } = req.body;
 
-  console.log(displayName, email, password, role);
+  console.log(displayName, email, password, role, privateKey);
 
   let existingUser;
   try {
@@ -115,6 +117,8 @@ const signup = async (req, res, next) => {
     email,
     password: hashedPassword,
     role,
+    privateKey: privateKey,
+    permissions: role,
   });
 
   try {
@@ -169,8 +173,8 @@ const signup = async (req, res, next) => {
 };
 
 const login = async (req, res, next) => {
-  const { email, password } = req.body;
-  console.log(email, password);
+  const { email, password, rememberMe, ip } = req.body;
+  console.log(email, password, rememberMe, ip);
 
   let existingUser;
 
@@ -230,7 +234,7 @@ const login = async (req, res, next) => {
     access_token = jwt.sign(
       { userId: existingUser.id, email: existingUser.email },
       "jwt_access_token",
-      { expiresIn: "1h" }
+      rememberMe ? null : { expiresIn: "1h" }
     );
   } catch (err) {
     // const error = new HttpError(
@@ -242,6 +246,8 @@ const login = async (req, res, next) => {
     return;
   }
 
+  console.log;
+
   res.json({
     message: "you are login success fully ",
     displayName: existingUser.displayName,
@@ -252,6 +258,20 @@ const login = async (req, res, next) => {
     access_token: access_token,
     success: true,
   });
+
+  User.update(
+    { _id: existingUser._id },
+    { $set: { lastLoginIp: ip, lastLogin: new Date().toISOString() } },
+    function (err) {
+      if (!err) {
+        console.log("User  Updated");
+        return;
+      } else {
+        console.log("error");
+        return;
+      }
+    }
+  );
 };
 // accessing token API
 const getToken = async (req, res, next) => {
@@ -403,12 +423,14 @@ const deleteUser = async (req, res, next) => {
 const editUser = async (req, res, next) => {
   console.log(req.body);
 
-  const { displayName, role, id } = req.body;
+  const { displayName, role, id, privateKey } = req.body;
 
   try {
     User.update(
       { _id: id },
-      { $set: { displayName: displayName, role: role } },
+      {
+        $set: { displayName: displayName, role: role, privateKey: privateKey },
+      },
       function (err) {
         if (!err) {
           console.log("User Updated");
@@ -447,6 +469,161 @@ const getManagers = async (req, res) => {
   res.json({ managers: users });
 };
 
+const sendOtp = async (req, res) => {
+  console.log(req.body);
+
+  let otp = otpGenerator.generate(4, {
+    upperCase: false,
+    specialChars: false,
+    alphabets: false,
+  });
+
+  const { email } = req.body;
+
+  if (email && otp) {
+    const output = `
+            <p>Here is your Forgot Password OTP</p>
+            <p>${otp}</p>
+            `;
+
+    // create reusable transporter object using the default SMTP transport
+    let transporter = nodemailer.createTransport({
+      host: "smtp.google.com",
+      port: 587,
+      secure: false, // true for 465, false for other ports
+      requireTLS: true,
+      service: "gmail",
+      auth: {
+        user: "queryaidataron@gmail.com", // generated ethereal user
+        pass: "nwnxovucjfoqqwww", // generated ethereal password
+      },
+    });
+
+    // setup email data with unicode symbols
+    let mailOptions = {
+      from: '"Expert Invest" ', // sender address
+      to: email, // list of receivers
+      subject: "Forgot Password OTP", // Subject line
+      // text: details, // plain text body
+      html: output, // html body
+    };
+
+    // send mail with defined transport object
+    transporter.sendMail(mailOptions, async (error, info) => {
+      if (error) {
+        return error;
+      } else {
+        console.log("Message sent: %s", info.messageId);
+        console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+        if (otp[0] === "0") {
+          otp = `0${otp}`;
+        }
+        User.update(
+          { email: email },
+          { $set: { forgotPasswordOtp: otp } },
+          function (err) {
+            if (!err) {
+              console.log("Otp Saved");
+              // return res.json({ success: true, message: "Username Updated" });
+            } else {
+              res.json({
+                success: false,
+                message: "Something went wrong",
+              });
+              return;
+            }
+          }
+        );
+        res.json({ success: true, message: "OTP Email Sent" });
+        // return true;
+      }
+    });
+    return true;
+  } else {
+    res.json({ success: false, message: "Something went Wrong" });
+    return false;
+  }
+};
+
+const verifyOtp = async (req, res) => {
+  console.log(req.body);
+  const { otp, email } = req.body;
+
+  let user;
+  try {
+    user = await User.findOne({ email: email });
+    if (user) {
+      console.log(user);
+      if (user.forgotPasswordOtp.toString() === otp) {
+        res.json({ success: true, message: "OTP Verified" });
+      } else {
+        res.json({ success: false, message: "Wrong OTP" });
+      }
+    }
+  } catch (err) {
+    console.log(err);
+    res.json({ success: false, message: "Something went Wrong" });
+  }
+};
+
+const newPassword = async (req, res) => {
+  console.log(req.body);
+
+  const { newPassword, email } = req.body;
+  console.log(newPassword, email);
+
+  if (newPassword && email) {
+    let hashedPassword;
+    try {
+      hashedPassword = await bcrypt.hash(newPassword, 12);
+    } catch (err) {
+      console.log("Error hashing password", err);
+
+      res.json({
+        success: false,
+        data: err,
+        message: "Something went wrong",
+      });
+      return;
+    }
+
+    console.log(hashedPassword);
+
+    try {
+      await User.update(
+        { email: email },
+        { $set: { password: hashedPassword } },
+        function (err) {
+          if (!err) {
+            console.log("Updated");
+            return res.json({ success: true, message: "Password Updated" });
+          } else {
+            console.log(err);
+            res.json({
+              success: false,
+              data: err,
+              message: "Something went wrong",
+            });
+            return;
+          }
+        }
+      );
+    } catch (err) {
+      console.log(err);
+      res.json({
+        success: false,
+        data: err,
+        message: "Something went wrong",
+      });
+    }
+  } else {
+    res.json({
+      success: false,
+      message: "Something went wrong",
+    });
+  }
+};
+
 module.exports = router;
 
 module.exports = {
@@ -459,4 +636,7 @@ module.exports = {
   getUser,
   editUser,
   getManagers,
+  sendOtp,
+  verifyOtp,
+  newPassword,
 };

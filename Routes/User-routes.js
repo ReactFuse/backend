@@ -29,4 +29,8 @@ router.post("/updateprofile", usersController.updateProfile);
 
 router.get("/getmanagers", usersController.getManagers);
 
+router.post("/sendotp", usersController.sendOtp);
+router.post("/verifyotp", usersController.verifyOtp);
+router.post("/newpassword", usersController.newPassword);
+
 module.exports = router;

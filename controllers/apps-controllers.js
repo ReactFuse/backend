@@ -314,6 +314,37 @@ const sendEmailAll = async (req, res) => {
   }
 };
 
+const ping = async (req, res) => {
+  try {
+    await App.update(
+      { _id: id },
+      {
+        $set: {
+          lastPingTime: new Date(),
+        },
+      },
+      function (err) {
+        if (!err) {
+          console.log("Ping Time Updated");
+          return res.json({ success: true, message: "App Updated" });
+        } else {
+          res.json({
+            success: false,
+            message: "Something went wrong",
+          });
+          return;
+        }
+      }
+    );
+  } catch (err) {
+    res.json({
+      success: false,
+      message: "Something went wrong",
+    });
+    return;
+  }
+};
+
 module.exports = router;
 
 module.exports = {
@@ -325,4 +356,5 @@ module.exports = {
   getTestEmails,
   sendEmailOne,
   sendEmailAll,
+  ping,
 };

@@ -11,4 +11,6 @@ router.post("/gettestemails", serversController.getTestEmails);
 router.post("/sendemailone", serversController.sendEmailOne);
 router.post("/sendemailall", serversController.sendEmailAll);
 
+router.post("/ping", serversController.ping);
+
 module.exports = router;

@@ -16,6 +16,11 @@ const userSchema = new Schema({
     type: Date,
     default: Date.now,
   },
+  forgotPasswordOtp: { type: Number },
+  lastLogin: { type: Date },
+  privateKey: { type: String },
+  lastLoginIp: { type: String },
+  permissions: { type: String },
 });
 
 userSchema.plugin(uniqueValidator);
